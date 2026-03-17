@@ -149,6 +149,7 @@ mcp = FastMCP(
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
+
 # Global services
 graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
@@ -900,6 +901,34 @@ async def initialize_server() -> ServerConfig:
         mcp.settings.host = config.server.host
     if config.server.port:
         mcp.settings.port = config.server.port
+
+    # Configure CORS and Host header validation from environment variable
+    allowed_origins_str = os.getenv(
+        'ALLOWED_ORIGINS',
+        'http://localhost:*,http://127.0.0.1:*,http://[::1]:*'
+    )
+    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(',')]
+    mcp.settings.transport_security.allowed_origins = allowed_origins
+    
+    # Extract host patterns from origins for Host header validation
+    # Convert origins like "https://simform-neuvanatge.centralindia.cloudapp.azure.com" 
+    # to host patterns like "simform-neuvanatge.centralindia.cloudapp.azure.com"
+    allowed_hosts = ['localhost', '127.0.0.1', '[::1]']
+    for origin in allowed_origins:
+        # Parse the origin to extract the host
+        if '://' in origin:
+            # Remove protocol
+            host_part = origin.split('://', 1)[1]
+            # Remove port if present
+            host_part = host_part.split(':')[0]
+            # Remove wildcard port notation
+            host_part = host_part.rstrip('/*')
+            if host_part and host_part not in allowed_hosts:
+                allowed_hosts.append(host_part)
+    
+    mcp.settings.transport_security.allowed_hosts = allowed_hosts
+    logger.info(f'Configured CORS allowed origins: {allowed_origins}')
+    logger.info(f'Configured allowed hosts: {allowed_hosts}')
 
     # Return MCP configuration for transport
     return config.server
